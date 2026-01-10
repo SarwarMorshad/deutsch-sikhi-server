@@ -86,11 +86,19 @@ app.use("/api/v1/exercises", require("./routes/exercise.routes"));
 // User Progress Routes
 app.use("/api/v1/progress", require("./routes/progress.routes"));
 
+// Settings Routes
+app.use("/api/v1/settings", require("./routes/settings.routes"));
+
 // Admin Routes
 app.use("/api/v1/admin", require("./routes/admin.routes"));
 
 // Video Rooms (add later)
 // app.use("/api/v1/video-rooms", require("./routes/videoRoom.routes"));
+
+// Seed Routes (DEV ONLY - remove in production!)
+if (process.env.NODE_ENV === "development") {
+  app.use("/api/v1/seed", require("./routes/seed.routes"));
+}
 
 // ======================
 // Error Handling
