@@ -5,6 +5,37 @@ const { getCollection } = require("../config/db");
 const { verifyToken } = require("../middlewares/auth");
 
 /**
+ * @route   GET /api/v1/users/me
+ * @desc    Get current user's profile
+ * @access  Private
+ */
+router.get("/me", verifyToken, async function (req, res) {
+  try {
+    const usersCollection = getCollection("users");
+
+    const user = await usersCollection.findOne({ firebaseUid: req.user.uid });
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found.",
+      });
+    }
+
+    res.json({
+      success: true,
+      data: user,
+    });
+  } catch (error) {
+    console.error("Get user error:", error.message);
+    res.status(500).json({
+      success: false,
+      message: "Error fetching user profile.",
+    });
+  }
+});
+
+/**
  * @route   PATCH /api/v1/users/me
  * @desc    Update current user's profile
  * @access  Private

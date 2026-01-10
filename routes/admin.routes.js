@@ -448,9 +448,12 @@ router.delete("/lessons/:id", async function (req, res) {
 router.get("/words", async function (req, res) {
   try {
     const wordsCollection = getCollection("words");
-    const { lesson, verified } = req.query;
+    const { lesson, level, verified } = req.query;
 
     const query = {};
+    if (level && ObjectId.isValid(level)) {
+      query.levelId = new ObjectId(level);
+    }
     if (lesson && ObjectId.isValid(lesson)) {
       query.lessonId = new ObjectId(lesson);
     }
@@ -481,27 +484,42 @@ router.get("/words", async function (req, res) {
  */
 router.post("/words", async function (req, res) {
   try {
-    const { lessonId, word_de, meaning_en, meaning_bn, ipa, audio, example, verified } = req.body;
+    const {
+      levelId,
+      lessonId,
+      word_de,
+      article,
+      partOfSpeech,
+      meaning_en,
+      meaning_bn,
+      ipa,
+      audio,
+      example,
+      verified,
+    } = req.body;
     const wordsCollection = getCollection("words");
 
-    // Validation
-    if (!lessonId || !word_de) {
+    // Validation - levelId is required, lessonId is optional
+    if (!levelId || !word_de) {
       return res.status(400).json({
         success: false,
-        message: "Lesson ID and German word are required.",
+        message: "Level ID and German word are required.",
       });
     }
 
-    if (!ObjectId.isValid(lessonId)) {
+    if (!ObjectId.isValid(levelId)) {
       return res.status(400).json({
         success: false,
-        message: "Invalid lesson ID.",
+        message: "Invalid level ID.",
       });
     }
 
     const newWord = {
-      lessonId: new ObjectId(lessonId),
+      levelId: new ObjectId(levelId),
+      lessonId: lessonId && ObjectId.isValid(lessonId) ? new ObjectId(lessonId) : null,
       word_de,
+      article: article || "",
+      partOfSpeech: partOfSpeech || "noun",
       meaning_en: meaning_en || "",
       meaning_bn: meaning_bn || "",
       ipa: ipa || "",
@@ -511,7 +529,7 @@ router.post("/words", async function (req, res) {
         meaning: "manual",
         audio: "manual",
       },
-      verified: verified || false,
+      verified: verified !== false,
       createdAt: new Date(),
       updatedAt: new Date(),
     };
@@ -540,7 +558,19 @@ router.post("/words", async function (req, res) {
 router.patch("/words/:id", async function (req, res) {
   try {
     const { id } = req.params;
-    const { lessonId, word_de, meaning_en, meaning_bn, ipa, audio, example, verified } = req.body;
+    const {
+      levelId,
+      lessonId,
+      word_de,
+      article,
+      partOfSpeech,
+      meaning_en,
+      meaning_bn,
+      ipa,
+      audio,
+      example,
+      verified,
+    } = req.body;
     const wordsCollection = getCollection("words");
 
     if (!ObjectId.isValid(id)) {
@@ -551,10 +581,17 @@ router.patch("/words/:id", async function (req, res) {
     }
 
     const updateFields = { updatedAt: new Date() };
-    if (lessonId && ObjectId.isValid(lessonId)) {
+    if (levelId && ObjectId.isValid(levelId)) {
+      updateFields.levelId = new ObjectId(levelId);
+    }
+    if (lessonId === null) {
+      updateFields.lessonId = null;
+    } else if (lessonId && ObjectId.isValid(lessonId)) {
       updateFields.lessonId = new ObjectId(lessonId);
     }
     if (word_de) updateFields.word_de = word_de;
+    if (article !== undefined) updateFields.article = article;
+    if (partOfSpeech) updateFields.partOfSpeech = partOfSpeech;
     if (meaning_en !== undefined) updateFields.meaning_en = meaning_en;
     if (meaning_bn !== undefined) updateFields.meaning_bn = meaning_bn;
     if (ipa !== undefined) updateFields.ipa = ipa;
