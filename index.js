@@ -156,3 +156,11 @@ process.on("SIGTERM", async () => {
 
 // Start the server
 startServer();
+
+// Leaderboard Routes
+const leaderboardRoutes = require("./routes/leaderboard.routes");
+app.use("/api/v1/leaderboard", leaderboardRoutes);
+
+// Grammar Routes
+const grammarRoutes = require("./routes/grammar.routes");
+app.use("/api/v1/grammar", grammarRoutes);
