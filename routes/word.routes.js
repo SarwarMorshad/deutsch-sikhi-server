@@ -12,10 +12,14 @@ const { optionalAuth } = require("../middlewares/auth");
 router.get("/", optionalAuth, async function (req, res) {
   try {
     const wordsCollection = getCollection("words");
-    const { lesson, limit = 50, page = 1, search } = req.query;
+    const { lesson, level, limit = 50, page = 1, search } = req.query;
 
     // Build query
     const query = { verified: true };
+
+    if (level && ObjectId.isValid(level)) {
+      query.levelId = new ObjectId(level);
+    }
 
     if (lesson && ObjectId.isValid(lesson)) {
       query.lessonId = new ObjectId(lesson);
@@ -107,7 +111,6 @@ router.get("/random/:count", optionalAuth, async function (req, res) {
     const { count } = req.params;
     const { level } = req.query;
     const wordsCollection = getCollection("words");
-    const lessonsCollection = getCollection("lessons");
 
     const limit = Math.min(parseInt(count) || 10, 50); // Max 50 words
 
@@ -116,13 +119,7 @@ router.get("/random/:count", optionalAuth, async function (req, res) {
 
     // Filter by level if provided
     if (level && ObjectId.isValid(level)) {
-      const lessons = await lessonsCollection
-        .find({ levelId: new ObjectId(level) })
-        .project({ _id: 1 })
-        .toArray();
-
-      const lessonIds = lessons.map((l) => l._id);
-      pipeline.push({ $match: { lessonId: { $in: lessonIds } } });
+      pipeline.push({ $match: { levelId: new ObjectId(level) } });
     }
 
     // Random sample

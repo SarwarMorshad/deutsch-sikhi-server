@@ -108,29 +108,36 @@ router.patch("/me/language", verifyToken, async function (req, res) {
       });
     }
 
-    const result = await usersCollection.findOneAndUpdate(
-      { firebaseUid: req.user.uid },
-      {
-        $set: {
-          "preferences.language": language,
-          updatedAt: new Date(),
-        },
-      },
-      { returnDocument: "after" }
-    );
+    // First check if user exists
+    const existingUser = await usersCollection.findOne({ firebaseUid: req.user.uid });
 
-    if (!result) {
+    if (!existingUser) {
       return res.status(404).json({
         success: false,
         message: "User not found.",
       });
     }
 
+    // Update with upsert for preferences
+    const result = await usersCollection.findOneAndUpdate(
+      { firebaseUid: req.user.uid },
+      {
+        $set: {
+          preferences: {
+            ...(existingUser.preferences || {}),
+            language: language,
+          },
+          updatedAt: new Date(),
+        },
+      },
+      { returnDocument: "after" }
+    );
+
     res.json({
       success: true,
       message: `Language updated to ${language === "bn" ? "Bengali" : "English"}.`,
       data: {
-        language: result.preferences.language,
+        language: result.preferences?.language || language,
       },
     });
   } catch (error) {

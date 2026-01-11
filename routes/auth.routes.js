@@ -45,6 +45,7 @@ router.get("/me", verifyToken, async function (req, res) {
         role: user.role,
         preferences: user.preferences,
         createdAt: user.createdAt,
+        updatedAt: user.updatedAt,
       },
     });
   } catch (error) {

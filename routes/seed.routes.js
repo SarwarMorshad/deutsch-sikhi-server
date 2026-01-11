@@ -63,17 +63,22 @@ router.post("/init", async function (req, res) {
     }
 
     // 4. Create Words
+    const a1LevelId = levelIds["A1"];
     for (const [moduleNum, words] of Object.entries(vocabularyByModule)) {
       const lessonId = lessonIds[parseInt(moduleNum)];
       if (!lessonId || !words.length) continue;
       await wordsCollection.deleteMany({ lessonId });
       const wordDocs = words.map((w) => ({
+        levelId: a1LevelId,
         lessonId,
-        german: w.german,
-        english: w.english,
-        bengali: w.bengali,
-        article: w.article || null,
-        partOfSpeech: w.partOfSpeech || "word",
+        word_de: w.german,
+        meaning_en: w.english,
+        meaning_bn: w.bengali,
+        article: w.article || "",
+        partOfSpeech: w.partOfSpeech || "noun",
+        ipa: "",
+        audio: { url: "" },
+        example: { de: "", en: "", bn: "" },
         verified: true,
         createdAt: new Date(),
         updatedAt: new Date(),
