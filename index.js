@@ -89,6 +89,12 @@ app.use("/api/v1/progress", require("./routes/progress.routes"));
 // Settings Routes
 app.use("/api/v1/settings", require("./routes/settings.routes"));
 
+// Leaderboard Routes
+app.use("/api/v1/leaderboard", require("./routes/leaderboard.routes"));
+
+// Grammar Routes
+app.use("/api/v1/grammar", require("./routes/grammar.routes"));
+
 // Admin Routes
 app.use("/api/v1/admin", require("./routes/admin.routes"));
 
@@ -156,11 +162,3 @@ process.on("SIGTERM", async () => {
 
 // Start the server
 startServer();
-
-// Leaderboard Routes
-const leaderboardRoutes = require("./routes/leaderboard.routes");
-app.use("/api/v1/leaderboard", leaderboardRoutes);
-
-// Grammar Routes
-const grammarRoutes = require("./routes/grammar.routes");
-app.use("/api/v1/grammar", grammarRoutes);

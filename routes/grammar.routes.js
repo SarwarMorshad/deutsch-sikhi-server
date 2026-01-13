@@ -38,12 +38,14 @@ router.get("/", async (req, res) => {
       query.levelId = new ObjectId(level);
     }
 
-    // Default to published for public access
-    if (status) {
+    // Handle status filter - "all" means no status filter
+    if (status && status !== "all") {
       query.status = status;
-    } else {
+    } else if (!status) {
+      // Default to published for public access
       query.status = "published";
     }
+    // If status === "all", don't add status to query (returns all)
 
     if (lesson && ObjectId.isValid(lesson)) {
       query.linkedLessons = new ObjectId(lesson);
