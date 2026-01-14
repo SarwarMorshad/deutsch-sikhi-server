@@ -12,6 +12,40 @@ const DEFAULT_SETTINGS = {
   requireSequentialLessons: true, // Must complete lessons in order
 };
 
+// Default XP settings
+const DEFAULT_XP_SETTINGS = {
+  activities: {
+    completeLesson: 20,
+    completeGrammar: 15,
+    learnWord: 5,
+    reviewWordCorrect: 2,
+    reviewWordWrong: 1,
+    completeQuiz: {
+      high: 30, // 90-100%
+      medium: 20, // 70-89%
+      low: 10, // Below 70%
+    },
+  },
+  quizThresholds: {
+    high: 90,
+    medium: 70,
+  },
+  streakBonuses: {
+    week: { days: 7, multiplier: 1.1 },
+    twoWeeks: { days: 14, multiplier: 1.25 },
+    month: { days: 30, multiplier: 1.5 },
+  },
+  dailyGoal: {
+    completionBonus: 10,
+    defaultTarget: 50,
+    options: [30, 50, 100, 150],
+  },
+  levelProgression: {
+    baseXP: 100,
+    incrementPerLevel: 50,
+  },
+};
+
 /**
  * @route   GET /api/v1/settings
  * @desc    Get public settings (for frontend)
@@ -171,6 +205,155 @@ router.post("/admin/reset", verifyToken, verifyAdmin, async function (req, res) 
     res.status(500).json({
       success: false,
       message: "Error resetting settings.",
+    });
+  }
+});
+
+// ============================================
+// XP SETTINGS ROUTES
+// ============================================
+
+/**
+ * @route   GET /api/v1/settings/xp
+ * @desc    Get XP settings (public - needed for XP calculations)
+ * @access  Public
+ */
+router.get("/xp", async function (req, res) {
+  try {
+    const settingsCollection = getCollection("settings");
+
+    let settings = await settingsCollection.findOne({ type: "xp" });
+
+    if (!settings) {
+      // Return defaults if no settings exist
+      settings = { ...DEFAULT_XP_SETTINGS };
+    }
+
+    res.json({
+      success: true,
+      data: settings,
+    });
+  } catch (error) {
+    console.error("Get XP settings error:", error.message);
+    res.status(500).json({
+      success: false,
+      message: "Error fetching XP settings.",
+    });
+  }
+});
+
+/**
+ * @route   GET /api/v1/settings/xp/admin
+ * @desc    Get all XP settings (for admin dashboard)
+ * @access  Admin
+ */
+router.get("/xp/admin", verifyToken, verifyAdmin, async function (req, res) {
+  try {
+    const settingsCollection = getCollection("settings");
+
+    let settings = await settingsCollection.findOne({ type: "xp" });
+
+    if (!settings) {
+      // Create default XP settings if not exist
+      settings = {
+        type: "xp",
+        ...DEFAULT_XP_SETTINGS,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+      await settingsCollection.insertOne(settings);
+    }
+
+    res.json({
+      success: true,
+      data: settings,
+    });
+  } catch (error) {
+    console.error("Get admin XP settings error:", error.message);
+    res.status(500).json({
+      success: false,
+      message: "Error fetching XP settings.",
+    });
+  }
+});
+
+/**
+ * @route   PATCH /api/v1/settings/xp/admin
+ * @desc    Update XP settings
+ * @access  Admin
+ */
+router.patch("/xp/admin", verifyToken, verifyAdmin, async function (req, res) {
+  try {
+    const { activities, quizThresholds, streakBonuses, dailyGoal, levelProgression } = req.body;
+
+    const settingsCollection = getCollection("settings");
+
+    // Build update object
+    const updateFields = { updatedAt: new Date() };
+
+    if (activities !== undefined) updateFields.activities = activities;
+    if (quizThresholds !== undefined) updateFields.quizThresholds = quizThresholds;
+    if (streakBonuses !== undefined) updateFields.streakBonuses = streakBonuses;
+    if (dailyGoal !== undefined) updateFields.dailyGoal = dailyGoal;
+    if (levelProgression !== undefined) updateFields.levelProgression = levelProgression;
+
+    // Upsert settings
+    const result = await settingsCollection.findOneAndUpdate(
+      { type: "xp" },
+      {
+        $set: updateFields,
+        $setOnInsert: {
+          type: "xp",
+          createdAt: new Date(),
+        },
+      },
+      { upsert: true, returnDocument: "after" }
+    );
+
+    res.json({
+      success: true,
+      message: "XP settings updated successfully.",
+      data: result,
+    });
+  } catch (error) {
+    console.error("Update XP settings error:", error.message);
+    res.status(500).json({
+      success: false,
+      message: "Error updating XP settings.",
+    });
+  }
+});
+
+/**
+ * @route   POST /api/v1/settings/xp/admin/reset
+ * @desc    Reset XP settings to defaults
+ * @access  Admin
+ */
+router.post("/xp/admin/reset", verifyToken, verifyAdmin, async function (req, res) {
+  try {
+    const settingsCollection = getCollection("settings");
+
+    const result = await settingsCollection.findOneAndUpdate(
+      { type: "xp" },
+      {
+        $set: {
+          ...DEFAULT_XP_SETTINGS,
+          updatedAt: new Date(),
+        },
+      },
+      { upsert: true, returnDocument: "after" }
+    );
+
+    res.json({
+      success: true,
+      message: "XP settings reset to defaults.",
+      data: result,
+    });
+  } catch (error) {
+    console.error("Reset XP settings error:", error.message);
+    res.status(500).json({
+      success: false,
+      message: "Error resetting XP settings.",
     });
   }
 });

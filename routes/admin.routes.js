@@ -8,6 +8,20 @@ const { verifyToken, verifyAdmin } = require("../middlewares/auth");
 router.use(verifyToken, verifyAdmin);
 
 // ============================================
+// MASTER ADMIN PROTECTION
+// ============================================
+
+// Master Admin Email from environment
+const MASTER_ADMIN_EMAIL = process.env.MASTER_ADMIN_EMAIL;
+
+/**
+ * Check if user is Master Admin
+ */
+const isMasterAdmin = (email) => {
+  return email === MASTER_ADMIN_EMAIL;
+};
+
+// ============================================
 // LEVELS MANAGEMENT
 // ============================================
 
@@ -861,7 +875,7 @@ router.delete("/exercises/:id", async function (req, res) {
 });
 
 // ============================================
-// USERS MANAGEMENT
+// USERS MANAGEMENT (With Master Admin Protection)
 // ============================================
 
 /**
@@ -885,13 +899,19 @@ router.get("/users", async function (req, res) {
 
     const total = await usersCollection.countDocuments(query);
 
+    // Add isMasterAdmin flag to each user for frontend
+    const usersWithMasterFlag = users.map((user) => ({
+      ...user,
+      isMasterAdmin: isMasterAdmin(user.email),
+    }));
+
     res.json({
       success: true,
       count: users.length,
       total,
       page: parseInt(page),
       totalPages: Math.ceil(total / parseInt(limit)),
-      data: users,
+      data: usersWithMasterFlag,
     });
   } catch (error) {
     console.error("Admin get users error:", error.message);
@@ -904,7 +924,7 @@ router.get("/users", async function (req, res) {
 
 /**
  * @route   PATCH /api/v1/admin/users/:id/role
- * @desc    Update user role
+ * @desc    Update user role (Protected: Cannot change Master Admin)
  * @access  Admin
  */
 router.patch("/users/:id/role", async function (req, res) {
@@ -927,18 +947,29 @@ router.patch("/users/:id/role", async function (req, res) {
       });
     }
 
-    const result = await usersCollection.findOneAndUpdate(
-      { _id: new ObjectId(id) },
-      { $set: { role, updatedAt: new Date() } },
-      { returnDocument: "after" }
-    );
+    // Get target user first
+    const targetUser = await usersCollection.findOne({ _id: new ObjectId(id) });
 
-    if (!result) {
+    if (!targetUser) {
       return res.status(404).json({
         success: false,
         message: "User not found.",
       });
     }
+
+    // ⚠️ MASTER ADMIN PROTECTION
+    if (isMasterAdmin(targetUser.email)) {
+      return res.status(403).json({
+        success: false,
+        message: "Cannot modify Master Admin's role.",
+      });
+    }
+
+    const result = await usersCollection.findOneAndUpdate(
+      { _id: new ObjectId(id) },
+      { $set: { role, updatedAt: new Date() } },
+      { returnDocument: "after" }
+    );
 
     res.json({
       success: true,
@@ -956,7 +987,7 @@ router.patch("/users/:id/role", async function (req, res) {
 
 /**
  * @route   PATCH /api/v1/admin/users/:id/block
- * @desc    Block/unblock user
+ * @desc    Block/unblock user (Protected: Cannot block Master Admin)
  * @access  Admin
  */
 router.patch("/users/:id/block", async function (req, res) {
@@ -972,18 +1003,29 @@ router.patch("/users/:id/block", async function (req, res) {
       });
     }
 
-    const result = await usersCollection.findOneAndUpdate(
-      { _id: new ObjectId(id) },
-      { $set: { blocked: !!blocked, updatedAt: new Date() } },
-      { returnDocument: "after" }
-    );
+    // Get target user first
+    const targetUser = await usersCollection.findOne({ _id: new ObjectId(id) });
 
-    if (!result) {
+    if (!targetUser) {
       return res.status(404).json({
         success: false,
         message: "User not found.",
       });
     }
+
+    // ⚠️ MASTER ADMIN PROTECTION
+    if (isMasterAdmin(targetUser.email)) {
+      return res.status(403).json({
+        success: false,
+        message: "Cannot block Master Admin.",
+      });
+    }
+
+    const result = await usersCollection.findOneAndUpdate(
+      { _id: new ObjectId(id) },
+      { $set: { blocked: !!blocked, updatedAt: new Date() } },
+      { returnDocument: "after" }
+    );
 
     res.json({
       success: true,
@@ -995,6 +1037,61 @@ router.patch("/users/:id/block", async function (req, res) {
     res.status(500).json({
       success: false,
       message: "Error updating user status.",
+    });
+  }
+});
+
+/**
+ * @route   DELETE /api/v1/admin/users/:id
+ * @desc    Delete user (Protected: Cannot delete Master Admin)
+ * @access  Admin
+ */
+router.delete("/users/:id", async function (req, res) {
+  try {
+    const { id } = req.params;
+    const usersCollection = getCollection("users");
+    const progressCollection = getCollection("progress");
+
+    if (!ObjectId.isValid(id)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid user ID.",
+      });
+    }
+
+    // Get target user first
+    const targetUser = await usersCollection.findOne({ _id: new ObjectId(id) });
+
+    if (!targetUser) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found.",
+      });
+    }
+
+    // ⚠️ MASTER ADMIN PROTECTION
+    if (isMasterAdmin(targetUser.email)) {
+      return res.status(403).json({
+        success: false,
+        message: "Cannot delete Master Admin.",
+      });
+    }
+
+    // Delete user's progress
+    await progressCollection.deleteMany({ firebaseUid: targetUser.firebaseUid });
+
+    // Delete user
+    await usersCollection.deleteOne({ _id: new ObjectId(id) });
+
+    res.json({
+      success: true,
+      message: "User deleted successfully.",
+    });
+  } catch (error) {
+    console.error("Delete user error:", error.message);
+    res.status(500).json({
+      success: false,
+      message: "Error deleting user.",
     });
   }
 });
