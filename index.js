@@ -86,6 +86,9 @@ app.use("/api/v1/exercises", require("./routes/exercise.routes"));
 // User Progress Routes
 app.use("/api/v1/progress", require("./routes/progress.routes"));
 
+// Achievement Routes
+app.use("/api/v1/achievements", require("./routes/achievement.routes"));
+
 // Settings Routes
 app.use("/api/v1/settings", require("./routes/settings.routes"));
 

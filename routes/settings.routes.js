@@ -358,4 +358,255 @@ router.post("/xp/admin/reset", verifyToken, verifyAdmin, async function (req, re
   }
 });
 
+// Add to existing DEFAULT_XP_SETTINGS in settings.routes.js
+
+const DEFAULT_ACHIEVEMENTS = {
+  xpMilestones: [
+    {
+      id: "bronze_learner",
+      name: "Bronze Learner",
+      icon: "🥉",
+      description: "Earn 1,000 XP",
+      requirement: 1000,
+      reward: 50,
+    },
+    {
+      id: "silver_learner",
+      name: "Silver Learner",
+      icon: "🥈",
+      description: "Earn 5,000 XP",
+      requirement: 5000,
+      reward: 100,
+    },
+    {
+      id: "gold_learner",
+      name: "Gold Learner",
+      icon: "🥇",
+      description: "Earn 10,000 XP",
+      requirement: 10000,
+      reward: 200,
+    },
+    {
+      id: "platinum_learner",
+      name: "Platinum Learner",
+      icon: "💎",
+      description: "Earn 25,000 XP",
+      requirement: 25000,
+      reward: 500,
+    },
+    {
+      id: "legendary_learner",
+      name: "Legendary Learner",
+      icon: "👑",
+      description: "Earn 50,000 XP",
+      requirement: 50000,
+      reward: 1000,
+    },
+  ],
+  streakMilestones: [
+    {
+      id: "week_warrior",
+      name: "Week Warrior",
+      icon: "🔥",
+      description: "7-day streak",
+      requirement: 7,
+      reward: 50,
+    },
+    {
+      id: "fortnight_fighter",
+      name: "Fortnight Fighter",
+      icon: "🌟",
+      description: "14-day streak",
+      requirement: 14,
+      reward: 100,
+    },
+    {
+      id: "monthly_master",
+      name: "Monthly Master",
+      icon: "⭐",
+      description: "30-day streak",
+      requirement: 30,
+      reward: 200,
+    },
+    {
+      id: "streak_legend",
+      name: "Streak Legend",
+      icon: "💫",
+      description: "100-day streak",
+      requirement: 100,
+      reward: 1000,
+    },
+  ],
+  lessonMilestones: [
+    {
+      id: "beginner",
+      name: "Beginner",
+      icon: "📚",
+      description: "Complete 10 lessons",
+      requirement: 10,
+      reward: 50,
+    },
+    {
+      id: "student",
+      name: "Student",
+      icon: "📖",
+      description: "Complete 50 lessons",
+      requirement: 50,
+      reward: 100,
+    },
+    {
+      id: "scholar",
+      name: "Scholar",
+      icon: "🎓",
+      description: "Complete 100 lessons",
+      requirement: 100,
+      reward: 200,
+    },
+    {
+      id: "professor",
+      name: "Professor",
+      icon: "👨‍🏫",
+      description: "Complete 250 lessons",
+      requirement: 250,
+      reward: 500,
+    },
+  ],
+  vocabularyMilestones: [
+    {
+      id: "word_collector",
+      name: "Word Collector",
+      icon: "📝",
+      description: "Learn 100 words",
+      requirement: 100,
+      reward: 50,
+    },
+    {
+      id: "vocabulary_builder",
+      name: "Vocabulary Builder",
+      icon: "📚",
+      description: "Learn 500 words",
+      requirement: 500,
+      reward: 100,
+    },
+    {
+      id: "word_master",
+      name: "Word Master",
+      icon: "🗣️",
+      description: "Learn 1,000 words",
+      requirement: 1000,
+      reward: 200,
+    },
+    {
+      id: "polyglot",
+      name: "Polyglot",
+      icon: "🌍",
+      description: "Learn 2,500 words",
+      requirement: 2500,
+      reward: 500,
+    },
+  ],
+  perfectScores: [
+    {
+      id: "first_perfect",
+      name: "First Perfect",
+      icon: "✨",
+      description: "Get 100% on a quiz",
+      requirement: 1,
+      reward: 25,
+    },
+    {
+      id: "perfectionist",
+      name: "Perfectionist",
+      icon: "💯",
+      description: "Get 100% on 10 quizzes",
+      requirement: 10,
+      reward: 100,
+    },
+    {
+      id: "flawless",
+      name: "Flawless",
+      icon: "🏆",
+      description: "Get 100% on 50 quizzes",
+      requirement: 50,
+      reward: 500,
+    },
+  ],
+  levelMilestones: [
+    { id: "level_5", name: "Level 5", icon: "5️⃣", description: "Reach Level 5", requirement: 5, reward: 50 },
+    {
+      id: "level_10",
+      name: "Level 10",
+      icon: "🔟",
+      description: "Reach Level 10",
+      requirement: 10,
+      reward: 100,
+    },
+    {
+      id: "level_25",
+      name: "Level 25",
+      icon: "🌟",
+      description: "Reach Level 25",
+      requirement: 25,
+      reward: 250,
+    },
+    {
+      id: "level_50",
+      name: "Level 50",
+      icon: "👑",
+      description: "Reach Level 50",
+      requirement: 50,
+      reward: 500,
+    },
+  ],
+  special: [
+    {
+      id: "early_bird",
+      name: "Early Bird",
+      icon: "🌅",
+      description: "Complete lesson before 8 AM",
+      requirement: 1,
+      reward: 25,
+    },
+    {
+      id: "night_owl",
+      name: "Night Owl",
+      icon: "🦉",
+      description: "Complete lesson after 10 PM",
+      requirement: 1,
+      reward: 25,
+    },
+    {
+      id: "speed_demon",
+      name: "Speed Demon",
+      icon: "⚡",
+      description: "Complete 5 lessons in one day",
+      requirement: 5,
+      reward: 100,
+    },
+    {
+      id: "consistent",
+      name: "Consistent",
+      icon: "📅",
+      description: "Complete daily goal 7 days in a row",
+      requirement: 7,
+      reward: 150,
+    },
+  ],
+};
+
+// User Achievement Schema (add to user document)
+// achievements: {
+//   unlocked: [
+//     { id: "bronze_learner", unlockedAt: Date, claimed: Boolean }
+//   ],
+//   progress: {
+//     xp: 1000,
+//     longestStreak: 7,
+//     lessonsCompleted: 10,
+//     wordsLearned: 100,
+//     perfectScores: 1,
+//     currentLevel: 5
+//   }
+// }
+
 module.exports = router;
