@@ -3,6 +3,7 @@ const router = express.Router();
 const { ObjectId } = require("mongodb");
 const { getCollection } = require("../config/db");
 const { optionalAuth, verifyToken } = require("../middlewares/auth");
+const { trackLessonCompletion } = require("../services/achievementTracker");
 
 // Helper: Get app settings
 async function getSettings() {
@@ -532,6 +533,12 @@ router.post("/:lessonId/complete", verifyToken, async function (req, res) {
         }
       );
 
+      // Track achievement progress (only if this is first time passing)
+      let newAchievements = [];
+      if (!existingProgress.passed && newPassed) {
+        newAchievements = await trackLessonCompletion(req.user.uid);
+      }
+
       // Check if next lesson is now unlocked
       const nextLesson = await lessonsCollection.findOne({
         levelId: lesson.levelId,
@@ -558,6 +565,7 @@ router.post("/:lessonId/complete", verifyToken, async function (req, res) {
                 }
               : null,
         },
+        newAchievements, // Send to frontend
       });
     }
 
@@ -572,6 +580,12 @@ router.post("/:lessonId/complete", verifyToken, async function (req, res) {
     };
 
     const result = await progressCollection.insertOne(newProgress);
+
+    // Track achievement progress (only if passed)
+    let newAchievements = [];
+    if (passed) {
+      newAchievements = await trackLessonCompletion(req.user.uid);
+    }
 
     // Check if next lesson is now unlocked
     const nextLesson = await lessonsCollection.findOne({
@@ -600,6 +614,7 @@ router.post("/:lessonId/complete", verifyToken, async function (req, res) {
               }
             : null,
       },
+      newAchievements, // Send to frontend
     });
   } catch (error) {
     console.error("Complete lesson error:", error.message);

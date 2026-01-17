@@ -3,6 +3,7 @@ const router = express.Router();
 const { ObjectId } = require("mongodb");
 const { getCollection } = require("../config/db");
 const { verifyToken, verifyAdmin } = require("../middlewares/auth");
+const { trackGrammarCompletion } = require("../services/achievementTracker");
 
 // Helper: Generate slug from title
 const generateSlug = (title) => {
@@ -574,6 +575,51 @@ router.get("/by-lesson/:lessonId", async (req, res) => {
     res.status(500).json({
       success: false,
       message: "Error fetching grammar topics.",
+    });
+  }
+});
+
+/**
+ * @route   POST /api/v1/grammar/:idOrSlug/complete
+ * @desc    Mark grammar topic as completed and track achievement progress
+ * @access  Private
+ */
+router.post("/:idOrSlug/complete", verifyToken, async function (req, res) {
+  try {
+    const { idOrSlug } = req.params;
+    const grammarCollection = getCollection("grammar");
+
+    // Build query - check if it's ObjectId or slug
+    let query;
+    if (ObjectId.isValid(idOrSlug)) {
+      query = { _id: new ObjectId(idOrSlug) };
+    } else {
+      query = { slug: idOrSlug };
+    }
+
+    const grammar = await grammarCollection.findOne(query);
+
+    if (!grammar) {
+      return res.status(404).json({
+        success: false,
+        message: "Grammar topic not found.",
+      });
+    }
+
+    // Track achievement progress
+    const newAchievements = await trackGrammarCompletion(req.user.uid);
+
+    res.json({
+      success: true,
+      message: "Grammar topic completed successfully",
+      data: grammar,
+      newAchievements, // Send to frontend
+    });
+  } catch (error) {
+    console.error("Complete grammar error:", error.message);
+    res.status(500).json({
+      success: false,
+      message: "Error completing grammar topic.",
     });
   }
 });

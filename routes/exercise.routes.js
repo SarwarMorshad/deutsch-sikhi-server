@@ -3,6 +3,7 @@ const router = express.Router();
 const { ObjectId } = require("mongodb");
 const { getCollection } = require("../config/db");
 const { optionalAuth, verifyToken } = require("../middlewares/auth");
+const { trackQuizCompletion } = require("../services/achievementTracker");
 
 /**
  * @route   GET /api/v1/exercises
@@ -153,6 +154,63 @@ router.post("/:exerciseId/check", optionalAuth, async function (req, res) {
     res.status(500).json({
       success: false,
       message: "Error checking answer.",
+    });
+  }
+});
+
+/**
+ * @route   POST /api/v1/exercises/:exerciseId/complete
+ * @desc    Complete exercise and track achievement progress
+ * @access  Private
+ */
+router.post("/:exerciseId/complete", verifyToken, async function (req, res) {
+  try {
+    const { exerciseId } = req.params;
+    const { score } = req.body; // score should be 0-100
+    const exercisesCollection = getCollection("exercises");
+
+    if (!ObjectId.isValid(exerciseId)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid exercise ID.",
+      });
+    }
+
+    if (typeof score !== "number" || score < 0 || score > 100) {
+      return res.status(400).json({
+        success: false,
+        message: "Score must be a number between 0 and 100.",
+      });
+    }
+
+    const exercise = await exercisesCollection.findOne({
+      _id: new ObjectId(exerciseId),
+    });
+
+    if (!exercise) {
+      return res.status(404).json({
+        success: false,
+        message: "Exercise not found.",
+      });
+    }
+
+    // Track achievement progress with score
+    const newAchievements = await trackQuizCompletion(req.user.uid, score);
+
+    res.json({
+      success: true,
+      message: "Exercise completed successfully",
+      data: {
+        score,
+        passed: score >= 70, // Assuming 70% is passing
+      },
+      newAchievements, // Send to frontend
+    });
+  } catch (error) {
+    console.error("Complete exercise error:", error.message);
+    res.status(500).json({
+      success: false,
+      message: "Error completing exercise.",
     });
   }
 });

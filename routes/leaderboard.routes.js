@@ -1,91 +1,97 @@
+// server/routes/leaderboard.routes.js
+
 const express = require("express");
 const router = express.Router();
 const { getCollection } = require("../config/db");
+const { verifyToken, optionalAuth } = require("../middlewares/auth");
 
 /**
  * @route   GET /api/v1/leaderboard
- * @desc    Get top learners by lessons completed and average score
- * @access  Public
+ * @desc    Get leaderboard with time filters
+ * @access  Public (but returns current user rank if authenticated)
+ * @query   period: 'all' | 'weekly' | 'monthly' (default: 'all')
+ * @query   limit: number (default: 50, max: 100)
  */
-router.get("/", async function (req, res) {
+router.get("/", optionalAuth, async (req, res) => {
   try {
-    const limit = Math.min(parseInt(req.query.limit) || 50, 100);
-    const progressCollection = getCollection("progress");
+    const { period = "all", limit = 50 } = req.query;
+    const limitNum = Math.min(parseInt(limit) || 50, 100);
+
     const usersCollection = getCollection("users");
 
-    // Aggregate progress by user
-    const leaderboard = await progressCollection
-      .aggregate([
-        // Group by userId
-        {
-          $group: {
-            _id: "$userId",
-            lessonsCompleted: { $sum: 1 },
-            totalScore: { $sum: "$score" },
-            lastActivity: { $max: "$completedAt" },
-          },
-        },
-        // Calculate average score
-        {
-          $addFields: {
-            averageScore: {
-              $round: [{ $divide: ["$totalScore", "$lessonsCompleted"] }, 0],
-            },
-          },
-        },
-        // Sort by lessons completed, then by average score
-        {
-          $sort: {
-            lessonsCompleted: -1,
-            averageScore: -1,
-            lastActivity: -1,
-          },
-        },
-        // Limit results
-        { $limit: limit },
-        // Lookup user details
-        {
-          $lookup: {
-            from: "users",
-            localField: "_id",
-            foreignField: "_id",
-            as: "user",
-          },
-        },
-        { $unwind: "$user" },
-        // Project only needed fields
-        {
-          $project: {
-            _id: 1,
-            lessonsCompleted: 1,
-            averageScore: 1,
-            totalScore: 1,
-            lastActivity: 1,
-            "user.name": 1,
-            "user.photoURL": 1,
-            "user.createdAt": 1,
-          },
-        },
-      ])
+    // Calculate date range for filtering
+    let dateFilter = {};
+    const now = new Date();
+
+    if (period === "weekly") {
+      const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+      dateFilter = { updatedAt: { $gte: weekAgo } };
+    } else if (period === "monthly") {
+      const monthAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+      dateFilter = { updatedAt: { $gte: monthAgo } };
+    }
+
+    // Get top users
+    const topUsers = await usersCollection
+      .find(dateFilter)
+      .sort({ "xp.total": -1 })
+      .limit(limitNum)
+      .project({
+        firebaseUid: 1,
+        name: 1,
+        photoURL: 1,
+        "xp.total": 1,
+        "xp.level": 1,
+        "streak.current": 1,
+        "streak.longest": 1,
+      })
       .toArray();
 
     // Add rank to each user
-    const rankedLeaderboard = leaderboard.map((entry, index) => ({
+    const leaderboard = topUsers.map((user, index) => ({
       rank: index + 1,
-      userId: entry._id,
-      name: entry.user.name || "Anonymous Learner",
-      photoURL: entry.user.photoURL || null,
-      lessonsCompleted: entry.lessonsCompleted,
-      averageScore: entry.averageScore,
-      totalScore: entry.totalScore,
-      lastActivity: entry.lastActivity,
-      memberSince: entry.user.createdAt,
+      firebaseUid: user.firebaseUid,
+      name: user.name,
+      photoURL: user.photoURL,
+      xp: user.xp?.total || 0,
+      level: user.xp?.level || 1,
+      currentStreak: user.streak?.current || 0,
+      longestStreak: user.streak?.longest || 0,
     }));
+
+    // If user is authenticated, get their rank
+    let currentUserRank = null;
+    if (req.user) {
+      const user = await usersCollection.findOne({ firebaseUid: req.user.uid });
+
+      if (user) {
+        // Count how many users have more XP
+        const rank = await usersCollection.countDocuments({
+          ...dateFilter,
+          "xp.total": { $gt: user.xp?.total || 0 },
+        });
+
+        currentUserRank = {
+          rank: rank + 1,
+          firebaseUid: user.firebaseUid,
+          name: user.name,
+          photoURL: user.photoURL,
+          xp: user.xp?.total || 0,
+          level: user.xp?.level || 1,
+          currentStreak: user.streak?.current || 0,
+          longestStreak: user.streak?.longest || 0,
+        };
+      }
+    }
 
     res.json({
       success: true,
-      count: rankedLeaderboard.length,
-      data: rankedLeaderboard,
+      data: {
+        leaderboard,
+        currentUser: currentUserRank,
+        period,
+        total: leaderboard.length,
+      },
     });
   } catch (error) {
     console.error("Get leaderboard error:", error.message);
@@ -98,91 +104,135 @@ router.get("/", async function (req, res) {
 
 /**
  * @route   GET /api/v1/leaderboard/me
- * @desc    Get current user's rank in leaderboard
- * @access  Private (requires verifyToken middleware)
+ * @desc    Get current user's rank and nearby users
+ * @access  Private
+ * @query   period: 'all' | 'weekly' | 'monthly' (default: 'all')
+ * @query   range: number (default: 5) - how many users above/below to show
  */
-router.get("/me", async function (req, res) {
+router.get("/me", verifyToken, async (req, res) => {
   try {
-    // This route needs verifyToken middleware when used
-    // For now, we'll accept firebaseUid as query param for flexibility
-    const { firebaseUid } = req.query;
+    const { period = "all", range = 5 } = req.query;
+    const rangeNum = Math.min(parseInt(range) || 5, 20);
 
-    if (!firebaseUid) {
-      return res.status(400).json({
-        success: false,
-        message: "Firebase UID required.",
-      });
-    }
-
-    const progressCollection = getCollection("progress");
     const usersCollection = getCollection("users");
 
-    // Get user
-    const user = await usersCollection.findOne({ firebaseUid });
-    if (!user) {
+    // Calculate date range for filtering
+    let dateFilter = {};
+    const now = new Date();
+
+    if (period === "weekly") {
+      const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+      dateFilter = { updatedAt: { $gte: weekAgo } };
+    } else if (period === "monthly") {
+      const monthAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+      dateFilter = { updatedAt: { $gte: monthAgo } };
+    }
+
+    // Get current user
+    const currentUser = await usersCollection.findOne({ firebaseUid: req.user.uid });
+
+    if (!currentUser) {
       return res.status(404).json({
         success: false,
         message: "User not found.",
       });
     }
 
-    // Get all users' progress for ranking
-    const allProgress = await progressCollection
-      .aggregate([
-        {
-          $group: {
-            _id: "$userId",
-            lessonsCompleted: { $sum: 1 },
-            totalScore: { $sum: "$score" },
-          },
-        },
-        {
-          $addFields: {
-            averageScore: {
-              $round: [{ $divide: ["$totalScore", "$lessonsCompleted"] }, 0],
-            },
-          },
-        },
-        {
-          $sort: {
-            lessonsCompleted: -1,
-            averageScore: -1,
-          },
-        },
-      ])
+    const currentUserXp = currentUser.xp?.total || 0;
+
+    // Count users with more XP (to get rank)
+    const rank = await usersCollection.countDocuments({
+      ...dateFilter,
+      "xp.total": { $gt: currentUserXp },
+    });
+
+    const currentUserRank = rank + 1;
+
+    // Get users above current user
+    const usersAbove = await usersCollection
+      .find({
+        ...dateFilter,
+        "xp.total": { $gt: currentUserXp },
+      })
+      .sort({ "xp.total": 1 }) // Ascending to get closest
+      .limit(rangeNum)
+      .project({
+        firebaseUid: 1,
+        name: 1,
+        photoURL: 1,
+        "xp.total": 1,
+        "xp.level": 1,
+        "streak.current": 1,
+      })
       .toArray();
 
-    // Find user's rank
-    const userRankIndex = allProgress.findIndex((p) => p._id.toString() === user._id.toString());
+    // Get users below current user
+    const usersBelow = await usersCollection
+      .find({
+        ...dateFilter,
+        "xp.total": { $lt: currentUserXp },
+      })
+      .sort({ "xp.total": -1 }) // Descending to get closest
+      .limit(rangeNum)
+      .project({
+        firebaseUid: 1,
+        name: 1,
+        photoURL: 1,
+        "xp.total": 1,
+        "xp.level": 1,
+        "streak.current": 1,
+      })
+      .toArray();
 
-    if (userRankIndex === -1) {
-      // User has no progress yet
-      return res.json({
-        success: true,
-        data: {
-          rank: null,
-          totalParticipants: allProgress.length,
-          lessonsCompleted: 0,
-          averageScore: 0,
-          message: "Complete a lesson to join the leaderboard!",
-        },
-      });
-    }
+    // Reverse usersAbove to show in correct order (higher XP first)
+    usersAbove.reverse();
 
-    const userProgress = allProgress[userRankIndex];
+    // Build nearby users array with ranks
+    const nearbyUsers = [
+      ...usersAbove.map((user, index) => ({
+        rank: currentUserRank - usersAbove.length + index,
+        firebaseUid: user.firebaseUid,
+        name: user.name,
+        photoURL: user.photoURL,
+        xp: user.xp?.total || 0,
+        level: user.xp?.level || 1,
+        currentStreak: user.streak?.current || 0,
+      })),
+      {
+        rank: currentUserRank,
+        firebaseUid: currentUser.firebaseUid,
+        name: currentUser.name,
+        photoURL: currentUser.photoURL,
+        xp: currentUserXp,
+        level: currentUser.xp?.level || 1,
+        currentStreak: currentUser.streak?.current || 0,
+        isCurrentUser: true,
+      },
+      ...usersBelow.map((user, index) => ({
+        rank: currentUserRank + index + 1,
+        firebaseUid: user.firebaseUid,
+        name: user.name,
+        photoURL: user.photoURL,
+        xp: user.xp?.total || 0,
+        level: user.xp?.level || 1,
+        currentStreak: user.streak?.current || 0,
+      })),
+    ];
 
     res.json({
       success: true,
       data: {
-        rank: userRankIndex + 1,
-        totalParticipants: allProgress.length,
-        lessonsCompleted: userProgress.lessonsCompleted,
-        averageScore: userProgress.averageScore,
-        totalScore: userProgress.totalScore,
-        percentile:
-          allProgress.length > 1
-            ? Math.round(((allProgress.length - userRankIndex) / allProgress.length) * 100)
-            : 100,
+        currentUser: {
+          rank: currentUserRank,
+          firebaseUid: currentUser.firebaseUid,
+          name: currentUser.name,
+          photoURL: currentUser.photoURL,
+          xp: currentUserXp,
+          level: currentUser.xp?.level || 1,
+          currentStreak: currentUser.streak?.current || 0,
+        },
+        nearbyUsers,
+        period,
       },
     });
   } catch (error) {
@@ -190,6 +240,57 @@ router.get("/me", async function (req, res) {
     res.status(500).json({
       success: false,
       message: "Error fetching user rank.",
+    });
+  }
+});
+
+/**
+ * @route   GET /api/v1/leaderboard/stats
+ * @desc    Get leaderboard statistics
+ * @access  Public
+ */
+router.get("/stats", async (req, res) => {
+  try {
+    const usersCollection = getCollection("users");
+
+    const stats = await usersCollection
+      .aggregate([
+        {
+          $group: {
+            _id: null,
+            totalUsers: { $sum: 1 },
+            totalXp: { $sum: "$xp.total" },
+            averageXp: { $avg: "$xp.total" },
+            highestXp: { $max: "$xp.total" },
+            highestStreak: { $max: "$streak.longest" },
+          },
+        },
+      ])
+      .toArray();
+
+    const result = stats[0] || {
+      totalUsers: 0,
+      totalXp: 0,
+      averageXp: 0,
+      highestXp: 0,
+      highestStreak: 0,
+    };
+
+    res.json({
+      success: true,
+      data: {
+        totalUsers: result.totalUsers,
+        totalXp: result.totalXp,
+        averageXp: Math.round(result.averageXp || 0),
+        highestXp: result.highestXp,
+        highestStreak: result.highestStreak,
+      },
+    });
+  } catch (error) {
+    console.error("Get leaderboard stats error:", error.message);
+    res.status(500).json({
+      success: false,
+      message: "Error fetching leaderboard statistics.",
     });
   }
 });

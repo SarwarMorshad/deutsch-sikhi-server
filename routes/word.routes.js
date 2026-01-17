@@ -2,7 +2,8 @@ const express = require("express");
 const router = express.Router();
 const { ObjectId } = require("mongodb");
 const { getCollection } = require("../config/db");
-const { optionalAuth } = require("../middlewares/auth");
+const { optionalAuth, verifyToken } = require("../middlewares/auth");
+const { trackWordLearned } = require("../services/achievementTracker");
 
 /**
  * @route   GET /api/v1/words
@@ -137,6 +138,108 @@ router.get("/random/:count", optionalAuth, async function (req, res) {
     res.status(500).json({
       success: false,
       message: "Error fetching random words.",
+    });
+  }
+});
+
+/**
+ * @route   POST /api/v1/words/:wordId/learn
+ * @desc    Mark word as learned and track achievement progress
+ * @access  Private
+ */
+router.post("/:wordId/learn", verifyToken, async function (req, res) {
+  try {
+    const { wordId } = req.params;
+    const wordsCollection = getCollection("words");
+    const usersCollection = getCollection("users");
+
+    if (!ObjectId.isValid(wordId)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid word ID.",
+      });
+    }
+
+    const word = await wordsCollection.findOne({
+      _id: new ObjectId(wordId),
+      verified: true,
+    });
+
+    if (!word) {
+      return res.status(404).json({
+        success: false,
+        message: "Word not found.",
+      });
+    }
+
+    // Get user
+    const user = await usersCollection.findOne({ firebaseUid: req.user.uid });
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found.",
+      });
+    }
+
+    // Track achievement progress for 1 word
+    const newAchievements = await trackWordLearned(req.user.uid, 1);
+
+    res.json({
+      success: true,
+      message: "Word learned successfully",
+      data: word,
+      newAchievements, // Send to frontend
+    });
+  } catch (error) {
+    console.error("Learn word error:", error.message);
+    res.status(500).json({
+      success: false,
+      message: "Error learning word.",
+    });
+  }
+});
+
+/**
+ * @route   POST /api/v1/words/learn-batch
+ * @desc    Mark multiple words as learned (bulk learning)
+ * @access  Private
+ */
+router.post("/learn-batch", verifyToken, async function (req, res) {
+  try {
+    const { wordIds } = req.body;
+
+    if (!Array.isArray(wordIds) || wordIds.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: "Word IDs array is required.",
+      });
+    }
+
+    const validIds = wordIds.filter((id) => ObjectId.isValid(id));
+
+    if (validIds.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: "No valid word IDs provided.",
+      });
+    }
+
+    // Track achievement progress for multiple words
+    const newAchievements = await trackWordLearned(req.user.uid, validIds.length);
+
+    res.json({
+      success: true,
+      message: `${validIds.length} words learned successfully`,
+      data: {
+        count: validIds.length,
+      },
+      newAchievements, // Send to frontend
+    });
+  } catch (error) {
+    console.error("Learn words batch error:", error.message);
+    res.status(500).json({
+      success: false,
+      message: "Error learning words.",
     });
   }
 });
