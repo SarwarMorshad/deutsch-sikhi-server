@@ -29,7 +29,7 @@ app.use(
       // Add production URLs later
     ],
     credentials: true,
-  })
+  }),
 );
 
 // Rate limiting
@@ -83,6 +83,8 @@ app.use("/api/v1/lessons", require("./routes/lesson.routes"));
 app.use("/api/v1/words", require("./routes/word.routes"));
 app.use("/api/v1/exercises", require("./routes/exercise.routes"));
 
+// Audio Routes (NEW!)
+app.use("/api/v1/audio", require("./routes/audio.routes"));
 // User Progress Routes
 app.use("/api/v1/progress", require("./routes/progress.routes"));
 
